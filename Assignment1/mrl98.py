@@ -1,7 +1,8 @@
 import numpy as np
 import warnings
 import argparse
-
+import time
+import sys
 
 class DataStreamer():
     '''
@@ -73,13 +74,14 @@ class MRL98():
         self.W = 0  # sum of weights of the output buffers in collapse operations
         self.n_empty_buffers = b
         self.full_buffers = []
+        self.memory_usage = 0
 
     # Verified to work
     def run_collapse_policy(self, data_stream, phi):
         """Running the algorithm proposed in the paper and merge nodes from left to right"""
-
+        start_time = time.time()
         while not data_stream.done():
-            print(f'current streamer index: {data_stream.current_idx}')
+            # print(f'current streamer index: {data_stream.current_idx}')
             num_full_buffers = len(self.full_buffers)
             l = min([buffer.level for buffer in self.full_buffers]
                     ) if num_full_buffers > 0 else 0
@@ -99,12 +101,19 @@ class MRL98():
             # If there are no empty buffers, invoke COLLAPSE on the set of buffers at level l,
             # assing the output buffer, level l+1
             else:
+                if not self.memory_usage:
+                    from pympler import asizeof
+                    # self.memory_usage = sys.getsizeof(self.full_buffers)
+                    self.memory_usage = asizeof.asizeof(self.full_buffers)
                 buffers_to_merge = self.get_buffers_at_level(l)
                 self.collapse(buffers_to_merge, l)
                 self.n_empty_buffers = len(buffers_to_merge) - 1
 
         # There's no more data, invoke Output
-        return self.output(self.full_buffers, phi)
+        output = self.output(self.full_buffers, phi)
+        self.time_elapsed = time.time() - start_time
+        return output
+
 
     def get_buffers_at_level(self, level):
         '''
@@ -127,10 +136,7 @@ class MRL98():
         """Collapse the given buffers into one buffer, this will leave one fill buffer (the output buffer), 
         and the rest will be empty"""
 
-        print(f'number of buffers: {len(buffers)}')
-
-        # print(f'input buffers: {buffers}')
-
+        # print(f'number of buffers: {len(buffers)}')
         output_buffer = Buffer(k=self.k)
         output_data = []
         output_weight = np.sum([buffer.weight for buffer in buffers])
@@ -159,7 +165,7 @@ class MRL98():
         output_buffer.fill(np.array(output_data))
         output_buffer.level = l + 1
         self.full_buffers.append(output_buffer)
-        print(f'output buffer weight: {output_buffer.weight}')
+        # print(f'output buffer weight: {output_buffer.weight}')
         return output_buffer
 
     # Verified to work
